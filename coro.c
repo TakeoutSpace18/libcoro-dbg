@@ -43,6 +43,96 @@
 #include <stddef.h>
 #include <string.h>
 
+#include <stdlib.h>
+#include <stdio.h>
+#include <sys/mman.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+
+/*****************************************************************************/
+/* coroutine context dump                                                     /
+/*****************************************************************************/
+#ifdef CORO_DEBUG
+
+typedef unsigned long addr_t;
+
+typedef struct state_table_entry {
+    addr_t sp;
+    addr_t pc;
+    addr_t fp;
+} ste_t;
+
+static ste_t *__coro_state_table = NULL;
+static size_t st_capacity = 128; /* how many entries (coroutines) can fit
+                                    in state table */
+
+static void*
+allocate_state_table()
+{
+    /* Map state table to file to examine coroutine stacks in corefile.*/
+    /* I did by modifying eu-stack utility from elfutils,              */
+    /* but maybe better approach can be found                          */
+    int fd = open("coro_states.bin", O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+    if (fd < 0)
+        goto fail;
+
+    size_t file_size = st_capacity * sizeof(ste_t);
+    if (ftruncate(fd, file_size) != 0)
+        goto fail;
+
+    void *st = mmap(NULL, file_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (st == MAP_FAILED)
+        goto fail;
+
+    memset(st, 0, file_size);
+
+    return st;
+
+fail:
+    fprintf(stderr, "allocate_state_table():\n"
+            "\t%s\n", strerror(errno));
+    close(fd);
+    return NULL;
+}
+
+static void __attribute__((__used__))
+update_coro_state(coro_context *context, addr_t sp, addr_t pc, addr_t fp)
+{
+    if (!__coro_state_table)
+    {
+        __coro_state_table = allocate_state_table();
+        if (!__coro_state_table)
+            return;
+    }
+
+    size_t pos;
+    for (pos = 0; pos < st_capacity; ++pos) 
+    {
+        /* Find entry by old stack pointer */
+        if (__coro_state_table[pos].sp == (addr_t) context->sp)
+            break;
+
+        /* null entry means end of the table */
+        if (__coro_state_table[pos].sp == 0)
+            break;
+    }
+
+    if (pos == st_capacity)
+    {
+        /* TODO: dynamically increase state table size */
+        fprintf(stderr, "update_coro_state():\n"
+                "\tstate table is full\n");
+        return;
+    }
+
+    __coro_state_table[pos].sp = sp;
+    __coro_state_table[pos].pc = pc;
+    __coro_state_table[pos].fp = fp;
+}
+
+#endif /* CORO_DEBUG */
+
 /*****************************************************************************/
 /* ucontext/setjmp/asm backends                                              */
 /*****************************************************************************/
@@ -188,6 +278,25 @@ trampoline (int sig)
            "\taddq $168, %rsp\n"
          #else
            #define NUM_SAVED 6
+            #ifdef CORO_DEBUG
+            /* rdi, rsi, rdx, rcx - arg registers */
+            "\tpushq %rdi\n" 
+            "\tpushq %rsi\n" 
+            "\tpushq %rdx\n" 
+            "\tpushq %rcx\n" 
+            
+            "\tmovq %rsp, %rsi\n" // sp arg
+            "\tsubq $16, %rsi\n" // correct sp from pushes in this asm inline
+            "\tmovq 32(%rsp), %rdx\n" // put ret addr to pc arg 
+            "\tmovq %rbp, %rcx\n" // fp arg
+            "\tcall update_coro_state\n"
+
+            "\tpopq %rcx\n"
+            "\tpopq %rdx\n"
+            "\tpopq %rsi\n"
+            "\tpopq %rdi\n"
+            #endif /* CORO_DEBUG */
+
            "\tpushq %rbp\n"
            "\tpushq %rbx\n"
            "\tpushq %r12\n"
@@ -357,8 +466,8 @@ coro_create (coro_context *ctx, coro_func coro, void *arg, void *sptr, size_t ss
 # elif CORO_IRIX
 
   coro_setjmp (ctx->env, 0);
-  ctx->env[JB_PC]                      = (__uint64_t)coro_init;
-  ctx->env[JB_SP]                      = (__uint64_t)STACK_ADJUST_PTR (sptr, ssize) - sizeof (long);
+  ctx->env[JB_PC]                      = (__addr_t)coro_init;
+  ctx->env[JB_SP]                      = (__addr_t)STACK_ADJUST_PTR (sptr, ssize) - sizeof (long);
 
 # elif CORO_ASM
 
