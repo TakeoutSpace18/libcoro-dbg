@@ -289,6 +289,25 @@ trampoline (int sig)
            "\taddq $168, %rsp\n"
          #else
            #define NUM_SAVED 6
+            #ifdef CORO_DEBUG
+            /* rdi, rsi, rdx, rcx - arg registers */
+            "\tpushq %rdi\n" 
+            "\tpushq %rsi\n" 
+            "\tpushq %rdx\n" 
+            "\tpushq %rcx\n" 
+            
+            "\tmovq %rsp, %rsi\n" // sp arg
+            "\tsubq $16, %rsi\n" // correct sp from pushes in this asm inline
+            "\tmovq 32(%rsp), %rdx\n" // put ret addr to pc arg 
+            "\tmovq %rbp, %rcx\n" // fp arg
+            "\tcall update_coro_state\n"
+
+            "\tpopq %rcx\n"
+            "\tpopq %rdx\n"
+            "\tpopq %rsi\n"
+            "\tpopq %rdi\n"
+            #endif /* CORO_DEBUG */
+
            "\tpushq %rbp\n"
            "\tpushq %rbx\n"
            "\tpushq %r12\n"
