@@ -180,7 +180,7 @@ coro_init (void)
 
 #if __GCC_HAVE_DWARF2_CFI_ASM && __amd64
   /*asm (".cfi_startproc");*/
-  /*asm (".cfi_undefined rip");*/
+  asm (".cfi_undefined rip");
 #endif
 
   func ((void *)arg);
