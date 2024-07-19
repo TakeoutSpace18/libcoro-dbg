@@ -3,76 +3,126 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #include "coro.h"
 
-struct coro_stack coroA_stack;
-struct coro_context coroA_context;
+#define NUM_CORO_DEFAULT 16
 
-struct coro_stack coroB_stack;
-struct coro_context coroB_context;
+struct coro_context main_context;
 
-static void coroutineA_main(void *arg);
-static void coroutineB_main(void *arg);
-static int coroutineA_func(int a, int b);
-static int coroutineB_func(int a, int b);
-int main(void);
+typedef struct {
+    struct coro_context ctx;
+    struct coro_stack stack;
+    int number;
+} coroutine_t;
 
 static void
-coroutineA_main(void *arg)
+coroutine_func(coroutine_t *self, useconds_t sleep_time)
 {
-    int var;
-    printf("coroutineA stack address: %p\n", &var);
+    printf("coro #%i: coroutine_func()\n", self->number);
+    usleep(sleep_time);
+    coro_transfer(&self->ctx, &main_context);
+}
 
+static void
+coroutine_main(void *arg)
+{
+    coroutine_t *self = (coroutine_t*) arg; 
+    useconds_t sleep_time = 400000;
+    int iter = 0;
     for (;;) {
-        printf("Hello from coroutineA\n");
-        printf("result: %i\n", coroutineA_func(123, 7));
-        coro_transfer(&coroA_context, &coroB_context);
+        printf("coro #%i; iter #%i: begin\n", self->number, iter);
+        usleep(sleep_time);
+        coro_transfer(&self->ctx, &main_context);
+
+        coroutine_func(self, sleep_time);
+
+        printf("coro #%i; iter #%i: end\n", self->number, iter);
+        usleep(sleep_time);
+        coro_transfer(&self->ctx, &main_context);
+
+        ++iter;
     }
 }
 
 static void
-coroutineB_main(void *arg)
+create_coroutine(coroutine_t *c, coro_func func, void *arg)
 {
-    int var;
-    printf("coroutineB stack address: %p\n", &var);
-
-    for (;;) {
-        printf("Hello from coroutineB\n");
-        printf("result: %i\n", coroutineB_func(45, 23));
-        coro_transfer(&coroB_context, &coroA_context);
+    if (coro_stack_alloc(&c->stack, 4096) == 0) {
+        fprintf(stderr, "coro_stack_alloc(): failed\n");
+        abort();
     }
+    coro_create(&c->ctx, func, arg, c->stack.sptr, c->stack.ssze);
 }
 
-static int
-coroutineA_func(int a, int b)
+static void
+destroy_coroutine(coroutine_t *c)
 {
-    printf("coroutineA_func()\n");
-    sleep(3);
-    return a * 100 + b;
+    coro_destroy(&c->ctx);
+    coro_stack_free(&c->stack);
 }
 
-static int
-coroutineB_func(int a, int b)
+static coroutine_t*
+create_coro_array(int num_coro)
 {
-    printf("coroutineB_func()\n");
-    sleep(3);
-    return a * 256 + b;
+    coroutine_t *coros = malloc(num_coro * sizeof(coroutine_t));
+    if (!coros) {
+        fprintf(stderr, "out of memory\n");
+        abort();
+    }
+
+    for (int i = 0; i < num_coro; ++i) {
+        coros[i].number = i;
+        create_coroutine(&coros[i], &coroutine_main, &coros[i]);
+    }
+
+    return coros;
 }
 
-int main(void)
+static void
+destroy_coro_array(coroutine_t **array, int num_coro)
+{
+    for (int i = 0; i < num_coro; ++i){
+        destroy_coroutine(&(*array)[i]);
+    }
+
+    free(*array);
+    *array = NULL;
+}
+
+int
+main(int argc, char **argv)
 {
     printf("pid: %i\n", getpid());
 
-    struct coro_context main_context;
+    int num_coro;
+    if (argc == 2) {
+        num_coro = atoi(argv[1]);
+    }
+    else if (argc == 1) {
+        num_coro = NUM_CORO_DEFAULT;
+    }
+    else {
+        printf("usage: corodemo <number of coroutines>\n");
+    }
+
+    if (num_coro <= 0) {
+        fprintf(stderr, "num_coro should be positive\n");
+    }
+
     coro_create(&main_context, NULL, NULL, NULL, 0);
 
-    coro_stack_alloc(&coroA_stack, 4096);
-    coro_create(&coroA_context, coroutineA_main, NULL, coroA_stack.sptr, coroA_stack.ssze);
+    coroutine_t *coros = create_coro_array(num_coro);
 
-    coro_stack_alloc(&coroB_stack, 4096);
-    coro_create(&coroB_context, coroutineB_main, NULL, coroB_stack.sptr, coroB_stack.ssze);
 
-    coro_transfer(&main_context, &coroA_context);
+    int cur_coro = 0;
+    while (true) {
+
+        coro_transfer(&main_context, &coros[cur_coro].ctx);
+        cur_coro = (cur_coro + 1) % num_coro;
+    }
+
+    destroy_coro_array(&coros, num_coro);
     return EXIT_SUCCESS;
 }
