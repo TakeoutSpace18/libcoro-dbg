@@ -7,7 +7,7 @@
 
 #include "coro.h"
 
-#define NUM_CORO_DEFAULT 16
+#define NUM_CORO_DEFAULT 4
 
 struct coro_context main_context;
 
@@ -115,10 +115,8 @@ main(int argc, char **argv)
 
     coroutine_t *coros = create_coro_array(num_coro);
 
-
     int cur_coro = 0;
     while (true) {
-
         coro_transfer(&main_context, &coros[cur_coro].ctx);
         cur_coro = (cur_coro + 1) % num_coro;
     }
