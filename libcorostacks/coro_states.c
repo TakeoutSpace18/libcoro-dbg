@@ -33,7 +33,7 @@ struct state_table
 };
 
 st_result_t
-open_state_table(state_table_t* handle, const char* filepath, st_source_t source)
+open_state_table(state_table_t *handle, const char *filepath, st_source_t source)
 {
     struct state_table *st = (struct state_table*) handle;
     st->source_type = source;
@@ -64,7 +64,7 @@ open_state_table(state_table_t* handle, const char* filepath, st_source_t source
 }
 
 void
-close_state_table(state_table_t* handle)
+close_state_table(state_table_t *handle)
 {
     struct state_table *st = (struct state_table*) handle;
     if (st->source_type == ST_SOURCE_FILE)
@@ -74,9 +74,9 @@ close_state_table(state_table_t* handle)
 }
 
 int
-st_next_entry(state_table_t *handle, ste_t* entry)
+st_next_entry(state_table_t *handle, ste_t *entry)
 {
-    struct state_table *st = (struct state_table*) handle;
+    struct state_table *st = (struct state_table *) handle;
 
     if (st->source_type == ST_SOURCE_FILE)
     {
@@ -84,9 +84,24 @@ st_next_entry(state_table_t *handle, ste_t* entry)
             return ST_EOF;
 
         if (entry->sp == 0)
+        {
             return ST_EOF;
+        }
 
         return ST_ENTRY_PRESENT;
+    }
+
+    cs_unreachable();
+}
+
+void
+st_reset_cursor(state_table_t *handle)
+{
+    struct state_table *st = (struct state_table *) handle;
+
+    if (st->source_type == ST_SOURCE_FILE)
+    {
+        fseek(st->impl.file.input, 0, SEEK_SET);
     }
 
     cs_unreachable();

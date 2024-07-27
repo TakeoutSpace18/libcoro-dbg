@@ -5,5 +5,5 @@ corodemo_src = files(
 
 executable('corodemo',
   corodemo_src,
-  c_args: '-DCORO_DEBUG'
+  c_args: ['-DCORO_DEBUG', '-fno-omit-frame-pointer']
 )

@@ -1,4 +1,7 @@
-project('libcoro-dbg', 'c')
+project('libcoro-dbg', 'c',
+  version : '0.0.1')
 
-subdir('corostacks')
+subdir('libcorostacks')
+subdir('print-coroutines')
 subdir('demo')
+

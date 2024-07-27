@@ -36,6 +36,9 @@ st_result_t open_state_table(state_table_t *handle,
 
 void close_state_table(state_table_t *handle);
 
+/* Begin reading state table from first entry */
+void st_reset_cursor(state_table_t *handle);
+
 /* Get next entry from the state table.
  * Returns positive value if entry is found, 0 otherwise */
 int st_next_entry(state_table_t *handle, ste_t *entry);
