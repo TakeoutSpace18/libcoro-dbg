@@ -144,6 +144,7 @@ static void
 core_detach(Dwfl* dwfl, void* dwfl_arg)
 {
     core_arg_t *core_arg = (core_arg_t*) dwfl_arg;
+    close_state_table(&core_arg->state_table);
     free(core_arg);
 }
 
@@ -157,32 +158,33 @@ static Dwfl_Thread_Callbacks callbacks = {
 };
 
 int
-coredump_attach(Dwfl *dwfl, Elf *core, const char* state_table_path)
+coredump_dwfl_callbacks_init(Dwfl *dwfl, Elf *core, pid_t pid, const char* state_table_path)
 {
-    /* TODO: decent error handling */
-    static pid_t pid = 1; /* TODO: get pid from core file*/
-
     core_arg_t *core_arg = (core_arg_t*) malloc(sizeof(core_arg_t));
     if (!core_arg)
-    {
-        fprintf(stderr, "out of memory\n");
-        abort();
-    }
+        goto core_arg_malloc_fail;
 
     core_arg->coredump_elf = core;
 
-    st_result_t ret = open_state_table(&core_arg->state_table, state_table_path, ST_SOURCE_FILE);
+    st_result_t ret = open_state_table(&core_arg->state_table,
+                                       state_table_path, ST_SOURCE_FILE);
     if (ret != ST_SUCCESS)
-    {
-        fprintf(stderr, "open_state_table():\n\t%s\n", st_strerror(st_errno));
-        exit(EXIT_FAILURE);
-    }
+        goto open_state_table_fail;
 
     if (dwfl_attach_state(dwfl, core, pid, &callbacks, core_arg) == false)
-    {
-        fprintf(stderr, "dwfl_attach_state():\n\t%s\n", st_strerror(st_errno));
-        exit(EXIT_FAILURE);
-    }
+        goto dwfl_attach_state_fail;
 
-    return pid;
+    return CS_OK;
+
+core_arg_malloc_fail:
+    error_report(CS_OUT_OF_MEMORY, NULL);
+    return CS_FAIL;
+
+open_state_table_fail:
+    return CS_FAIL;
+
+dwfl_attach_state_fail:
+    error_report(CS_INTERNAL_ERROR,
+                 "dwfl_attach_state():\n\t%s", dwfl_errmsg(-1));
+    return CS_FAIL;
 }

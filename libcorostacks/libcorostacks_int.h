@@ -16,7 +16,8 @@ struct csInstance
 /* Calls dwfl_attach_state with Dwfl_Thread_Callbacks setup for extracting
    coroutine state from the ELF core file. */
 
-int coredump_attach(Dwfl *dwfl, Elf *core, const char* state_table_path);
+int coredump_dwfl_callbacks_init(Dwfl *dwfl, Elf *core, pid_t pid,
+                                 const char* state_table_path);
 
 #define error_report(errcode, format, ...) \
     error_report_impl(__func__, errcode, format, ##__VA_ARGS__)

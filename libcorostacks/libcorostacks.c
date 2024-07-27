@@ -1,20 +1,18 @@
-#include <elfutils/libdw.h>
-#include <libelf.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
-
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <assert.h>
+#include <errno.h>
 
 #include <elfutils/libdwfl.h>
+#include <elfutils/libdw.h>
+#include <libelf.h>
 
-#include "coro_states.h"
 #include "libcorostacks.h"
 #include "libcorostacks_int.h"
 #include "utils.h"
-
 
 
 static int
@@ -31,6 +29,8 @@ getframe_callback(Dwfl_Frame *frame, void *arg)
 csInstance_t*
 csCoredumpAttach(const char *coredumpPath, const char *stateTablePath)
 {
+    assert(coredumpPath);
+
     csInstance_t *pInstance = (csInstance_t *) malloc(sizeof(*pInstance));
     if (!pInstance)
         goto instance_malloc_fail;
@@ -56,8 +56,9 @@ csCoredumpAttach(const char *coredumpPath, const char *stateTablePath)
     if (!pInstance->coredump_elf)
         goto elf_begin_fail;
 
-    /*TODO: refactor this function */
-    coredump_attach(pInstance->dwfl, pInstance->coredump_elf, stateTablePath);
+    pid_t pid = 1; /*TODO: write function to read pid from coredump */
+    coredump_dwfl_callbacks_init(pInstance->dwfl, pInstance->coredump_elf, pid,
+                                 stateTablePath);
 
     return pInstance;
 
@@ -73,7 +74,7 @@ dwfl_begin_fail:
 coredump_open_fail:
     dwfl_end(pInstance->dwfl);
     free(pInstance);
-    error_report(CS_INTERNAL_ERROR, "failed to open %s: %s",
+    error_report(CS_IO_ERROR, "failed to open \"%s\": %s",
                  coredumpPath, strerror(errno));
     return NULL;
 
@@ -87,7 +88,18 @@ elf_begin_fail:
 
 void csDetach(csInstance_t **ppInstance)
 {
-    /* not implemented yet */
+    assert(ppInstance);
+    if (!*ppInstance)
+        return;
+    
+    csInstance_t *pInstance = *ppInstance;
+
+    elf_end(pInstance->coredump_elf);
+    close(pInstance->coredump_fd);
+    dwfl_end(pInstance->dwfl);
+    free(pInstance);
+
+    *ppInstance = NULL;
 }
 
 static int
@@ -115,7 +127,8 @@ getcoroutine_cb(Dwfl_Thread *thread, void *arg)
         .tid = dwfl_thread_tid(thread)
     };
 
-    (*pCoroutinesCount)++;
+    if (pCoroutinesCount)
+        (*pCoroutinesCount)++;
 
     return DWARF_CB_OK;
 }
@@ -123,8 +136,11 @@ getcoroutine_cb(Dwfl_Thread *thread, void *arg)
 int csEnumerateCoroutines(csInstance_t *pInstance, size_t *pCoroutinesCount,
                           csCoroutine_t *pCoroutines)
 {
+    assert(pInstance);
+
     if (!pCoroutines)
     {
+        assert(pCoroutinesCount);
         int ret = dwfl_getthreads(pInstance->dwfl,
                                   coroutine_count_cb, pCoroutinesCount);
         if (ret == -1)
@@ -133,7 +149,8 @@ int csEnumerateCoroutines(csInstance_t *pInstance, size_t *pCoroutinesCount,
         return CS_OK;
     }
 
-    *pCoroutinesCount = 0;
+    if (pCoroutinesCount)
+        *pCoroutinesCount = 0;
     getcoroutine_arg_t arg = { pCoroutines, pCoroutinesCount };
 
     int ret = dwfl_getthreads(pInstance->dwfl,
@@ -155,5 +172,4 @@ int csEnumerateFrames(csInstance_t *pInstance, csCoroutine_t *pCoroutine,
 {
     NOT_IMPLEMENTED_FUNCTION;
 }
-
 

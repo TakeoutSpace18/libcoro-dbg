@@ -31,9 +31,11 @@ errcode_to_string(csErrorCode_t errcode)
             return "out of memory";
         case CS_INTERNAL_ERROR:
             return "internal error";
+        case CS_IO_ERROR:
+            return "input/output error";
     }
 
-    cs_unreachable();
+    return "unknown error";
 }
 
 void

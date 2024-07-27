@@ -8,7 +8,7 @@
 static void
 help(void)
 {
-    printf("usage: corostacks <coredump_file> [<state_table_file>]\n");
+    printf("usage: print-coroutines <coredump_file> [<state_table_file>]\n");
 }
 
 int
@@ -54,13 +54,11 @@ main(int argc, char **argv) {
 
     return EXIT_SUCCESS;
 
-coredump_attach_fail:
-    fprintf(stderr, "csCoredumpAttach(): %s\n", csErrorMessage());
-    return EXIT_FAILURE;
 
 enumerate_coroutines_fail:
-    fprintf(stderr, "csEnumerateCoroutines(): %s\n", csErrorMessage());
     csDetach(&cs);
+coredump_attach_fail:
+    fprintf(stderr, "%s", csErrorMessage());
     return EXIT_FAILURE;
 
 malloc_fail:
