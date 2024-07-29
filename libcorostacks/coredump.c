@@ -33,10 +33,6 @@ coredump_vmem_read(Elf *coredump_elf, csAddr_t addr, size_t nbytes, char *result
         if (addr + nbytes > end)
             goto size_too_big_fail;
 
-        if (phdr.p_align > 1)
-            fprintf(stderr, "coredump_vmem_read() warning:"
-            "segment that contains addr %lx has positive alignment\n", addr);
-
         int64_t offset = phdr.p_offset + addr - start;
         Elf_Data *data = elf_getdata_rawchunk(coredump_elf, offset, nbytes, ELF_T_ADDR);
         if (data == NULL)
