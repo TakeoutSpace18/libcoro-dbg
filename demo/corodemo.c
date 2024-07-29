@@ -18,11 +18,21 @@ typedef struct {
 } coroutine_t;
 
 static void
-coroutine_func(coroutine_t *self, useconds_t sleep_time)
+coroutine_funcB(coroutine_t *self, useconds_t sleep_time)
 {
-    printf("coro #%i: coroutine_func()\n", self->number);
+    printf("coro #%i: coroutine_funcB()\n", self->number);
     usleep(sleep_time);
     coro_transfer(&self->ctx, &main_context);
+}
+
+static void
+coroutine_funcA(coroutine_t *self, useconds_t sleep_time)
+{
+    printf("coro #%i: coroutine_funcA()\n", self->number);
+    usleep(sleep_time);
+    coro_transfer(&self->ctx, &main_context);
+
+    coroutine_funcB(self, sleep_time);
 }
 
 static void
@@ -36,7 +46,7 @@ coroutine_main(void *arg)
         usleep(sleep_time);
         coro_transfer(&self->ctx, &main_context);
 
-        coroutine_func(self, sleep_time);
+        coroutine_funcA(self, sleep_time);
 
         printf("coro #%i; iter #%i: end\n", self->number, iter);
         usleep(sleep_time);
