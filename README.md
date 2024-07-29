@@ -39,3 +39,10 @@ cd build
 meson compile
 meson install
 ```
+
+### How to use demo
+Inside libcoro-dbg/build directory:
+1) `gdb demo/corodemo` & `start` - launch demo with GDB
+2)  `Ctrl+c` & `gcore` after some time, to generate core file
+3) `q` - exit GDB
+4) `print-coroutines/print-coroutines core.<pid>` - print backtraces
