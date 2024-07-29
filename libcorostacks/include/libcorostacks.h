@@ -3,6 +3,9 @@
 
 #include <libelf.h>
 #include <stdlib.h>
+#include <stdbool.h>
+
+typedef unsigned long csAddr_t;
 
 /* Handle that represents current libcorostacks
  * attachment to target address space */
@@ -10,11 +13,25 @@ typedef struct csInstance csInstance_t;
 
 typedef struct csCoroutine
 {
-    int tid;
+    pid_t tid;
 }
 csCoroutine_t;
 
-typedef struct csFrame csFrame_t;
+#define CS_FUNCNAME_BUFSIZE 256
+
+typedef struct csFrame
+{
+    csAddr_t pc;
+    bool is_activation; /* See DWARF "activation" definition */
+
+    /* can't get this from frame for some reason
+    csAddr_t fp;
+    csAddr_t sp;
+    */
+
+    char funcname[CS_FUNCNAME_BUFSIZE];
+}
+csFrame_t;
 
 /* Initialize library by reading coroutine states from coredump file.
  * Returns NULL on failure. */
@@ -35,8 +52,15 @@ int csEnumerateCoroutines(csInstance_t *pInstance, size_t *pCoroutinesCount,
                           csCoroutine_t *pCoroutines)
 __nonnull_attribute__(1);
 
+
+/* Retrieve list of frames of the given coroutine.
+ * pFrames may be NULL, in which case only the number
+ * of frames is obtained. 
+ * On success returns CS_OK 
+ * On failure returns CS_FAIL and sets csErrorMessage() */
 int csEnumerateFrames(csInstance_t *pInstance, csCoroutine_t *pCoroutine,
-                               size_t *pFrameCount, csFrame_t *pFrames);
+                               size_t *pFrameCount, csFrame_t *pFrames)
+__nonnull_attribute__(1, 2);
 
 
 /******************** Error handling ********************/

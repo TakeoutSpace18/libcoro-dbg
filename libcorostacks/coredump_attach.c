@@ -33,9 +33,6 @@ core_next_thread(Dwfl* dwfl, void* dwfl_arg, void** thread_argp)
 {
     core_arg_t *core_arg = (core_arg_t*) dwfl_arg;
 
-    /* TODO: keep tid in state table */
-    static pid_t tid;
-
     coroutine_arg_t *thread_arg;
     if (*thread_argp == NULL)
     {
@@ -46,7 +43,6 @@ core_next_thread(Dwfl* dwfl, void* dwfl_arg, void** thread_argp)
         }
 
         st_reset_cursor(&core_arg->state_table);
-        tid = 0;
 
         *thread_argp = thread_arg;
     }
@@ -58,8 +54,7 @@ core_next_thread(Dwfl* dwfl, void* dwfl_arg, void** thread_argp)
     int ret = st_next_entry(&core_arg->state_table, &thread_arg->st_entry);
     if (ret == ST_ENTRY_PRESENT)
     {
-        tid++;
-        return tid;
+        return thread_arg->st_entry.tid;
     }
     else
     {
@@ -134,8 +129,18 @@ core_set_initial_registers(Dwfl_Thread* thread, void* thread_arg)
     coroutine_arg_t *coro_arg = (coroutine_arg_t*) thread_arg;
 
     dwfl_thread_state_register_pc(thread, coro_arg->st_entry.pc);
-    dwfl_thread_state_registers(thread, 6, 1, &coro_arg->st_entry.fp);
-    dwfl_thread_state_registers(thread, 7, 1, &coro_arg->st_entry.sp);
+    if (!dwfl_thread_state_registers(thread, 6, 1, &coro_arg->st_entry.fp))
+    {
+        error_report(CS_INTERNAL_ERROR, "Failed to set fp register");
+        return false;
+    }
+
+
+    if (!dwfl_thread_state_registers(thread, 7, 1, &coro_arg->st_entry.sp))
+    {
+        error_report(CS_INTERNAL_ERROR, "Failed to set sp register");
+        return false;
+    }
 
     return true;
 }
@@ -150,7 +155,8 @@ core_detach(Dwfl* dwfl, void* dwfl_arg)
 
 static Dwfl_Thread_Callbacks callbacks = {
     .next_thread = core_next_thread,
-    .get_thread = NULL,
+    .get_thread = NULL, /* this method will be emulated by
+                           next_thread callback (linear search) */
     .memory_read = core_memory_read,
     .set_initial_registers = core_set_initial_registers,
     .detach = core_detach,

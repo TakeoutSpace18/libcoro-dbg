@@ -1,6 +1,8 @@
 #ifndef CORO_STATES_H
 #define CORO_STATES_H
 
+#include "libcorostacks.h"
+
 /* supported methods to load state table */
 typedef enum
 {
@@ -8,13 +10,13 @@ typedef enum
     ST_SOURCE_COREDUMP /* directly from address space in the core file */
 } st_source_t;
 
-typedef unsigned long addr_t;
 
 typedef struct state_table_entry
 {
-    addr_t sp;
-    addr_t pc;
-    addr_t fp;
+    csAddr_t sp;
+    csAddr_t pc;
+    csAddr_t fp;
+    pid_t tid;
 } ste_t;
 
 #define ST_HANDLE_SIZE 32
@@ -43,14 +45,8 @@ void st_reset_cursor(state_table_t *handle);
  * Returns positive value if entry is found, 0 otherwise */
 int st_next_entry(state_table_t *handle, ste_t *entry);
 
-
-/******************** Error handling ********************/
-enum {
-    ST_ERROR_OPEN_FILE,
-    ST_ERROR_INVALID_ARGUMENTS
-}; 
-
-extern int st_errno;
-const char *st_strerror(int st_errno);
+/* Find entry by TID
+ * Return ST_ENTRY_PRESENT on success, ST_EOF on failure */
+int st_get_by_tid(state_table_t *handle, pid_t tid, ste_t *entry);
 
 #endif /* CORO_STATES_H */

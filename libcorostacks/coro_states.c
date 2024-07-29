@@ -5,10 +5,9 @@
 #include <string.h>
 #include <errno.h>
 
+#include "libcorostacks.h"
+#include "libcorostacks_int.h"
 #include "utils.h"
-
-int st_errno;
-static int saved_errno;
 
 struct file_impl
 {
@@ -42,11 +41,7 @@ open_state_table(state_table_t *handle, const char *filepath, st_source_t source
     {
         st->impl.file.input = fopen(filepath, "rb");
         if (!st->impl.file.input)
-        {
-            st_errno = ST_ERROR_OPEN_FILE; 
-            saved_errno = errno;
-            return ST_ERROR;
-        }
+            goto file_open_fail;
 
         return ST_SUCCESS;
     }
@@ -55,12 +50,13 @@ open_state_table(state_table_t *handle, const char *filepath, st_source_t source
         abort();
         fprintf(stderr, "coredump source is not implemented yet\n");
     }
-    else
-    {
-        return ST_ERROR_INVALID_ARGUMENTS;
-    }
 
     cs_unreachable();
+
+file_open_fail:
+    error_report(CS_IO_ERROR, "Failed to open file \"%s\": %s",
+                 filepath, strerror(errno));
+    return ST_ERROR;
 }
 
 void
@@ -107,21 +103,23 @@ st_reset_cursor(state_table_t *handle)
     cs_unreachable();
 }
 
-const char*
-st_strerror(int st_errno)
+int
+st_get_by_tid(state_table_t *handle, pid_t tid, ste_t *entry)
 {
-    static char strbuf[256];
+    struct state_table *st = (struct state_table *) handle;
 
-    switch (st_errno)
+    if (st->source_type == ST_SOURCE_FILE)
     {
-        case ST_ERROR_OPEN_FILE:
-            sprintf(strbuf, "failed to open file: %s", strerror(saved_errno));
-            break;
-        case ST_ERROR_INVALID_ARGUMENTS:
-            sprintf(strbuf, "invalid arguments");
-            break;
+        st_reset_cursor(handle);
+        
+        while (fread(entry, sizeof(ste_t), 1, st->impl.file.input) == 1)
+        {
+            if (entry->tid == tid)
+                return ST_ENTRY_PRESENT;
+        }
+
+        return ST_EOF;
     }
 
-    return strbuf;
+    cs_unreachable();
 }
-

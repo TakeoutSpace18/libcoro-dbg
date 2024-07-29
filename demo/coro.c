@@ -49,6 +49,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 /*****************************************************************************/
 /* coroutine context dump                                                     /
@@ -61,6 +62,7 @@ typedef struct state_table_entry {
     addr_t sp;
     addr_t pc;
     addr_t fp;
+    pid_t tid;
 } ste_t;
 
 static ste_t *__coro_state_table = NULL;
@@ -106,6 +108,7 @@ update_coro_state(coro_context *context, addr_t sp, addr_t pc, addr_t fp)
             return;
     }
 
+    bool new_entry = false;
     size_t pos;
     for (pos = 0; pos < st_capacity; ++pos) 
     {
@@ -115,7 +118,10 @@ update_coro_state(coro_context *context, addr_t sp, addr_t pc, addr_t fp)
 
         /* null entry means end of the table */
         if (__coro_state_table[pos].sp == 0)
+        {
+            new_entry = true;
             break;
+        }
     }
 
     if (pos == st_capacity)
@@ -124,6 +130,15 @@ update_coro_state(coro_context *context, addr_t sp, addr_t pc, addr_t fp)
         fprintf(stderr, "update_coro_state():\n"
                 "\tstate table is full\n");
         return;
+    }
+
+    /* Set TID for new entry */
+    static size_t num_entries = 0;
+    if (new_entry)
+    {
+        num_entries++;
+        pid_t tid = num_entries;
+        __coro_state_table[pos].tid = tid;
     }
 
     __coro_state_table[pos].sp = sp;

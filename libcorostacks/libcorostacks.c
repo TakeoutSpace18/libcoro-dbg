@@ -14,17 +14,11 @@
 #include "libcorostacks_int.h"
 #include "utils.h"
 
-
-static int
-getframe_callback(Dwfl_Frame *frame, void *arg)
-{
-    Dwarf_Addr pc;
-    bool isactivation;
-    dwfl_frame_pc(frame, &pc, &isactivation);
-    printf("\tpc: %lx, isactivation: %i\n", pc, isactivation);
-
-    return DWARF_CB_OK;
-}
+Dwfl_Callbacks dwfl_callbacks = {
+    .find_elf = dwfl_build_id_find_elf,
+    .find_debuginfo = dwfl_standard_find_debuginfo,
+    .debuginfo_path = NULL // TODO: provide this path in separate call
+};
 
 csInstance_t*
 csCoredumpAttach(const char *coredumpPath, const char *stateTablePath)
@@ -35,14 +29,8 @@ csCoredumpAttach(const char *coredumpPath, const char *stateTablePath)
     if (!pInstance)
         goto instance_malloc_fail;
         
-    static Dwfl_Callbacks dwfl_callbacks = {
-        .find_elf = dwfl_build_id_find_elf,
-        .find_debuginfo = dwfl_standard_find_debuginfo,
-        .debuginfo_path = NULL // TODO: provide this path in separate call
-    };
 
     pInstance->dwfl = dwfl_begin(&dwfl_callbacks);
-
     if (!pInstance->dwfl)
         goto dwfl_begin_fail;
 
@@ -55,6 +43,15 @@ csCoredumpAttach(const char *coredumpPath, const char *stateTablePath)
                                         ELF_C_READ_MMAP, NULL);
     if (!pInstance->coredump_elf)
         goto elf_begin_fail;
+
+    int ret = dwfl_core_file_report(pInstance->dwfl,
+                                    pInstance->coredump_elf, NULL);
+    if (ret == -1)
+        goto report_fail;
+
+    printf("reported %i modules\n", ret);
+
+    dwfl_report_end(pInstance->dwfl, NULL, NULL);
 
     pid_t pid = 1; /*TODO: write function to read pid from coredump */
     coredump_dwfl_callbacks_init(pInstance->dwfl, pInstance->coredump_elf, pid,
@@ -79,6 +76,14 @@ coredump_open_fail:
     return NULL;
 
 elf_begin_fail:
+    close(pInstance->coredump_fd);
+    dwfl_end(pInstance->dwfl);
+    free(pInstance);
+    error_report(CS_INTERNAL_ERROR, "%s", dwfl_errmsg(-1));
+    return NULL;
+
+report_fail:
+    elf_end(pInstance->coredump_elf);
     close(pInstance->coredump_fd);
     dwfl_end(pInstance->dwfl);
     free(pInstance);
@@ -138,6 +143,9 @@ int csEnumerateCoroutines(csInstance_t *pInstance, size_t *pCoroutinesCount,
 {
     assert(pInstance);
 
+    if (pCoroutinesCount)
+        *pCoroutinesCount = 0;
+
     if (!pCoroutines)
     {
         assert(pCoroutinesCount);
@@ -149,8 +157,6 @@ int csEnumerateCoroutines(csInstance_t *pInstance, size_t *pCoroutinesCount,
         return CS_OK;
     }
 
-    if (pCoroutinesCount)
-        *pCoroutinesCount = 0;
     getcoroutine_arg_t arg = { pCoroutines, pCoroutinesCount };
 
     int ret = dwfl_getthreads(pInstance->dwfl,
@@ -167,9 +173,95 @@ dwfl_getthreads_fail:
 
 }
 
+static int
+frame_count_cb(Dwfl_Frame *state, void *arg)
+{
+    size_t *pFrameCount = (size_t *) arg;
+    (*pFrameCount)++;
+    return DWARF_CB_OK;
+}
+
+typedef struct getframe_arg
+{
+    csFrame_t *pFrames;
+    size_t *pFrameCount;
+    Dwfl *dwfl;
+}
+getframe_arg_t;
+
+static int
+getframe_cb(Dwfl_Frame *state, void *arg)
+{
+    size_t *pFrameCount = ((getframe_arg_t *) arg)->pFrameCount; 
+    csFrame_t *pFrames = ((getframe_arg_t *) arg)->pFrames; 
+    Dwfl *dwfl = ((getframe_arg_t *) arg)->dwfl; 
+
+    csFrame_t *frame = &pFrames[*pFrameCount];
+
+    if (!dwfl_frame_pc(state, &frame->pc, &frame->is_activation))
+        goto dwfl_fail;
+
+    /* This doesn't work for some reason */
+    /* 6 - DWARF rbp register number */
+    // if (!dwfl_frame_reg(state, 6, &target_frame->fp))
+        // goto dwfl_fail;
+
+    /* 7 - DWARF rsp register number */
+    // if (!dwfl_frame_reg(state, 7, &target_frame->sp))
+        // goto dwfl_fail;
+
+    /* Get function name */
+    Dwarf_Addr pc_adjusted = frame->pc - (frame->is_activation ? 1 : 0);
+    Dwfl_Module *module = dwfl_addrmodule(dwfl, pc_adjusted);
+    const char *name = dwfl_module_addrname(module, pc_adjusted);
+    if (name)
+        strncpy(frame->funcname, name, CS_FUNCNAME_BUFSIZE);
+    else 
+        snprintf(frame->funcname, CS_FUNCNAME_BUFSIZE, "??");
+
+
+    if (pFrameCount)
+        (*pFrameCount)++;
+
+    return DWARF_CB_OK;
+
+dwfl_fail:
+    error_report(CS_INTERNAL_ERROR, "dwfl_frame_pc(): %s", dwfl_errmsg(-1));
+    return DWARF_CB_ABORT;
+}
+
 int csEnumerateFrames(csInstance_t *pInstance, csCoroutine_t *pCoroutine,
                       size_t *pFrameCount, csFrame_t *pFrames)
 {
-    NOT_IMPLEMENTED_FUNCTION;
+    assert(pInstance);
+    assert(pCoroutine);
+
+    if (pFrameCount)
+        *pFrameCount = 0;
+
+    if (!pFrames)
+    {
+        assert(pFrameCount);
+        int ret = dwfl_getthread_frames(pInstance->dwfl, pCoroutine->tid,
+                                        frame_count_cb, pFrameCount);
+        if (ret == -1)
+            goto dwfl_getthread_frames_fail;
+
+        return CS_OK;
+    }
+
+    getframe_arg_t arg = { pFrames, pFrameCount, pInstance->dwfl };
+
+    int ret = dwfl_getthread_frames(pInstance->dwfl, pCoroutine->tid,
+                                    getframe_cb, &arg);
+    if (ret == -1)
+        goto dwfl_getthread_frames_fail;
+
+    return CS_OK;
+
+dwfl_getthread_frames_fail:
+    error_report(CS_INTERNAL_ERROR,
+                 "dwfl_getthread_frames() failed: %s", dwfl_errmsg(-1));
+    return CS_FAIL;
 }
 
