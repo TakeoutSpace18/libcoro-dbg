@@ -1,17 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <string.h>
 
 #include "libcorostacks.h"
-
-#define STATE_TABLE_DEFAULT_NAME "coro_states.bin"
 
 static csInstance_t *cs;
 
 static void
 help(void)
 {
-    printf("usage: print-coroutines <coredump_file> [<state_table_file>]\n");
+    printf("usage: print-coroutines <coredump_file>\n");
 }
 
 static void
@@ -53,7 +52,12 @@ malloc_fail:
 int
 main(int argc, char **argv) {
     const char *coredump_path;
-    const char *state_table_path;
+
+    if (argc > 1 && strcmp(argv[1], "--help") == 0)
+    {
+        help();
+        return EXIT_SUCCESS;
+    }
 
     if (argc > 1)
         coredump_path = argv[1];
@@ -63,12 +67,7 @@ main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    if (argc > 2)
-        state_table_path = argv[2];
-    else
-        state_table_path = STATE_TABLE_DEFAULT_NAME;
-
-    cs = csCoredumpAttach(coredump_path, state_table_path);
+    cs = csCoredumpAttach(coredump_path);
     if (!cs)
         goto coredump_attach_fail;
 
@@ -88,7 +87,7 @@ main(int argc, char **argv) {
     printf("Found %zu coroutines\n", coroutineCount);
     for (size_t i = 0; i < coroutineCount; ++i)
     {
-        printf("Coroutine #%i (tid = %i)\n", i, coroutines[i].tid);
+        printf("Coroutine #%zu (tid = %i)\n", i, coroutines[i].tid);
         print_backtrace(&coroutines[i]);
     }
 

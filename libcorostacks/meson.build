@@ -2,6 +2,7 @@ libcorostacks_src = files(
   'libcorostacks.c',
   'coro_states.c',
   'coredump_attach.c',
+  'coredump.c',
   'errors.c'
 )
 

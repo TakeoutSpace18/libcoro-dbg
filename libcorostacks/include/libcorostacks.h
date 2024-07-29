@@ -35,9 +35,8 @@ csFrame_t;
 
 /* Initialize library by reading coroutine states from coredump file.
  * Returns NULL on failure. */
-csInstance_t *csCoredumpAttach(const char *coredumpPath,
-                               const char *stateTablePath)
-__nonnull_attribute__(1, 2);
+csInstance_t *csCoredumpAttach(const char *coredumpPath)
+__nonnull_attribute__(1);
 
 /* Finish working with library and release resources */
 void csDetach(csInstance_t **ppInstance)

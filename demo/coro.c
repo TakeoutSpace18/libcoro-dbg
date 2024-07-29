@@ -70,11 +70,11 @@ static size_t st_capacity = 128; /* how many entries (coroutines) can fit
                                     in state table */
 
 static void*
-allocate_state_table()
+map_state_table_file()
 {
     /* Map state table to file to examine coroutine stacks in corefile.*/
-    /* I did by modifying eu-stack utility from elfutils,              */
-    /* but maybe better approach can be found                          */
+    /* This is less convenient approach than reading state table       */
+    /* directly from process address space                             */
     int fd = open("coro_states.bin", O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
     if (fd < 0)
         goto fail;
@@ -103,7 +103,11 @@ update_coro_state(coro_context *context, addr_t sp, addr_t pc, addr_t fp)
 {
     if (!__coro_state_table)
     {
+#ifdef CORO_DEBUG_MAP_TO_FILE
         __coro_state_table = allocate_state_table();
+#else
+        __coro_state_table = calloc(st_capacity, sizeof(ste_t));
+#endif
         if (!__coro_state_table)
             return;
     }

@@ -56,7 +56,7 @@ core_next_thread(Dwfl* dwfl, void* dwfl_arg, void** thread_argp)
     {
         return thread_arg->st_entry.tid;
     }
-    else
+    else if (ret == ST_EOF)
     {
         /* no more coroutines */
         free(thread_arg);
@@ -72,55 +72,11 @@ core_memory_read(Dwfl* dwfl, Dwarf_Addr addr, Dwarf_Word* result,
 {
     core_arg_t *core_arg = (core_arg_t*) dwfl_arg;
     Elf *coredump_elf = core_arg->coredump_elf;
-    assert(coredump_elf);
 
-    size_t phdr_num;
-    if (elf_getphdrnum(coredump_elf, &phdr_num) < 0)
-        goto elf_getphdrnum_fail;
+    const size_t nbytes = 8; /* only x86_64 is currently supported */
+    int ret = coredump_vmem_read(coredump_elf, addr, nbytes, (char *) result);
 
-    /* Find program header that contains desired addr,
-     * and read the data from coredump */
-    for (size_t i = 0; i < phdr_num; ++i)
-    {
-        GElf_Phdr phdr;
-        GElf_Phdr *phdr_p = gelf_getphdr(coredump_elf, i, &phdr);
-        if (!phdr_p || phdr.p_type != PT_LOAD)
-            continue;
-
-        GElf_Addr start = phdr.p_vaddr;
-        GElf_Addr end = phdr.p_vaddr + phdr.p_memsz;
-        
-        if (addr < start || end <= addr)
-            continue;
-
-        if (phdr.p_align > 1)
-            fprintf(stderr, "core_memory_read() warning:"
-            "segment that contains addr %lx has positive alignment\n", addr);
-
-        int64_t offset = phdr.p_offset + addr - start;
-        const size_t nbytes = 8; /* only x86_64 is currently supported */
-        Elf_Data *data = elf_getdata_rawchunk(coredump_elf, offset, nbytes, ELF_T_ADDR);
-        if (data == NULL)
-            goto elf_getdata_rawchunk_fail;
-
-        assert(data->d_size == nbytes);
-
-        *result = *((const Dwarf_Word*) data->d_buf);
-
-        return true;
-    }
-
-    error_report(CS_INTERNAL_ERROR,
-                 "program header containing desired address not found");
-    return false;
-
-elf_getphdrnum_fail:
-    error_report(CS_INTERNAL_ERROR, "failed to get number of program headers");
-    return false;
-
-elf_getdata_rawchunk_fail:
-    error_report(CS_INTERNAL_ERROR, "failed to read data from coredump file");
-    return false;
+    return ret == CS_OK;
 }
 
 static bool
@@ -149,7 +105,7 @@ static void
 core_detach(Dwfl* dwfl, void* dwfl_arg)
 {
     core_arg_t *core_arg = (core_arg_t*) dwfl_arg;
-    close_state_table(&core_arg->state_table);
+    st_close(&core_arg->state_table);
     free(core_arg);
 }
 
@@ -164,7 +120,7 @@ static Dwfl_Thread_Callbacks callbacks = {
 };
 
 int
-coredump_dwfl_callbacks_init(Dwfl *dwfl, Elf *core, pid_t pid, const char* state_table_path)
+coredump_dwfl_callbacks_init(Dwfl *dwfl, Elf *core, pid_t pid)
 {
     core_arg_t *core_arg = (core_arg_t*) malloc(sizeof(core_arg_t));
     if (!core_arg)
@@ -172,8 +128,8 @@ coredump_dwfl_callbacks_init(Dwfl *dwfl, Elf *core, pid_t pid, const char* state
 
     core_arg->coredump_elf = core;
 
-    st_result_t ret = open_state_table(&core_arg->state_table,
-                                       state_table_path, ST_SOURCE_FILE);
+    st_result_t ret = st_open_from_coredump(&core_arg->state_table,
+                                        dwfl, core);
     if (ret != ST_SUCCESS)
         goto open_state_table_fail;
 

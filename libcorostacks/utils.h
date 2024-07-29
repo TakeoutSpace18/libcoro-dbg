@@ -14,4 +14,10 @@
     abort(); \
 } while (0)
 
+#define NOT_IMPLEMENTED do { \
+    fprintf(stderr, "%s:%i this is not implemented yet\n",\
+            __FILE__, __LINE__); \
+    abort(); \
+} while (0)
+
 #endif /* UTILS_H */

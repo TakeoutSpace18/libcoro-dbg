@@ -21,7 +21,7 @@ Dwfl_Callbacks dwfl_callbacks = {
 };
 
 csInstance_t*
-csCoredumpAttach(const char *coredumpPath, const char *stateTablePath)
+csCoredumpAttach(const char *coredumpPath)
 {
     assert(coredumpPath);
 
@@ -49,13 +49,10 @@ csCoredumpAttach(const char *coredumpPath, const char *stateTablePath)
     if (ret == -1)
         goto report_fail;
 
-    printf("reported %i modules\n", ret);
-
     dwfl_report_end(pInstance->dwfl, NULL, NULL);
 
     pid_t pid = 1; /*TODO: write function to read pid from coredump */
-    coredump_dwfl_callbacks_init(pInstance->dwfl, pInstance->coredump_elf, pid,
-                                 stateTablePath);
+    coredump_dwfl_callbacks_init(pInstance->dwfl, pInstance->coredump_elf, pid);
 
     return pInstance;
 
