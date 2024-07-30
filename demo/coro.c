@@ -45,6 +45,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <sys/cdefs.h>
 #include <sys/mman.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -66,11 +67,11 @@ typedef struct state_table_entry {
 } ste_t;
 
 static ste_t *__coro_state_table = NULL;
-static size_t st_capacity = 128; /* how many entries (coroutines) can fit
+static size_t st_capacity = 1024; /* how many entries (coroutines) can fit
                                     in state table */
 
-static void*
-map_state_table_file()
+static void* __attribute_used__
+map_state_table_file() 
 {
     /* Map state table to file to examine coroutine stacks in corefile.*/
     /* This is less convenient approach than reading state table       */
@@ -98,7 +99,7 @@ fail:
     return NULL;
 }
 
-static void __attribute__((__used__))
+static void __attribute_used__
 update_coro_state(coro_context *context, addr_t sp, addr_t pc, addr_t fp)
 {
     if (!__coro_state_table)
@@ -130,9 +131,17 @@ update_coro_state(coro_context *context, addr_t sp, addr_t pc, addr_t fp)
 
     if (pos == st_capacity)
     {
-        /* TODO: dynamically increase state table size */
-        fprintf(stderr, "update_coro_state():\n"
-                "\tstate table is full\n");
+        ste_t *tmp = realloc(__coro_state_table, st_capacity * 2 * sizeof(ste_t));
+        if (!tmp)
+        {
+            fprintf(stderr, "update_coro_state(): out of memory\n");
+            return;
+        }
+        /* Fill allocated part with zeroes */
+        memset(tmp + st_capacity, 0, st_capacity * sizeof(ste_t));
+
+        __coro_state_table = tmp;
+        st_capacity *= 2;
         return;
     }
 
