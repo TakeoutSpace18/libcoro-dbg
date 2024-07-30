@@ -61,19 +61,13 @@ instance_malloc_fail:
     error_report(CS_OUT_OF_MEMORY, NULL);
     goto fail_return;
 
-dwfl_begin_fail:
-    error_report(CS_INTERNAL_ERROR, "%s", dwfl_errmsg(-1));
-    goto fail_return;
-
 coredump_open_fail:
     error_report(CS_IO_ERROR, "failed to open \"%s\": %s",
                  coredumpPath, strerror(errno));
     goto fail_return;
 
 elf_begin_fail:
-    error_report(CS_INTERNAL_ERROR, "%s", dwfl_errmsg(-1));
-    goto fail_return;
-
+dwfl_begin_fail:
 report_fail:
     error_report(CS_INTERNAL_ERROR, "%s", dwfl_errmsg(-1));
     goto fail_return;
