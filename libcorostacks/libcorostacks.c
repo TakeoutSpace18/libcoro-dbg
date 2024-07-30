@@ -12,6 +12,7 @@
 
 #include "libcorostacks.h"
 #include "libcorostacks_int.h"
+#include "errors.h"
 #include "utils.h"
 
 Dwfl_Callbacks dwfl_callbacks = {
@@ -25,15 +26,13 @@ csCoredumpAttach(const char *coredumpPath)
 {
     assert(coredumpPath);
 
-    csInstance_t *pInstance = (csInstance_t *) malloc(sizeof(*pInstance));
+    csInstance_t *pInstance = (csInstance_t *) calloc(1, sizeof(*pInstance));
     if (!pInstance)
         goto instance_malloc_fail;
         
-
     pInstance->dwfl = dwfl_begin(&dwfl_callbacks);
     if (!pInstance->dwfl)
         goto dwfl_begin_fail;
-
 
     pInstance->coredump_fd = open(coredumpPath, 0, O_RDONLY);
     if (pInstance->coredump_fd < 0)
@@ -52,40 +51,41 @@ csCoredumpAttach(const char *coredumpPath)
     dwfl_report_end(pInstance->dwfl, NULL, NULL);
 
     pid_t pid = 1; /*TODO: write function to read pid from coredump */
-    coredump_dwfl_callbacks_init(pInstance->dwfl, pInstance->coredump_elf, pid);
+    ret = coredump_dwfl_callbacks_init(pInstance->dwfl, pInstance->coredump_elf, pid);
+    if (ret == CS_FAIL)
+        goto callbacks_init_fail;
 
     return pInstance;
 
 instance_malloc_fail:
     error_report(CS_OUT_OF_MEMORY, NULL);
-    return NULL;
+    goto fail_return;
 
 dwfl_begin_fail:
-    free(pInstance);
     error_report(CS_INTERNAL_ERROR, "%s", dwfl_errmsg(-1));
-    return NULL;
+    goto fail_return;
 
 coredump_open_fail:
-    dwfl_end(pInstance->dwfl);
-    free(pInstance);
     error_report(CS_IO_ERROR, "failed to open \"%s\": %s",
                  coredumpPath, strerror(errno));
-    return NULL;
+    goto fail_return;
 
 elf_begin_fail:
-    close(pInstance->coredump_fd);
-    dwfl_end(pInstance->dwfl);
-    free(pInstance);
     error_report(CS_INTERNAL_ERROR, "%s", dwfl_errmsg(-1));
-    return NULL;
+    goto fail_return;
 
 report_fail:
+    error_report(CS_INTERNAL_ERROR, "%s", dwfl_errmsg(-1));
+    goto fail_return;
+
+callbacks_init_fail:
+fail_return:
     elf_end(pInstance->coredump_elf);
     close(pInstance->coredump_fd);
     dwfl_end(pInstance->dwfl);
     free(pInstance);
-    error_report(CS_INTERNAL_ERROR, "%s", dwfl_errmsg(-1));
     return NULL;
+
 }
 
 void csDetach(csInstance_t **ppInstance)

@@ -1,15 +1,17 @@
 #include "coro_states.h"
 
-#include <elfutils/libdw.h>
-#include <elfutils/libdwfl.h>
-#include <gelf.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 
+#include <elfutils/libdw.h>
+#include <elfutils/libdwfl.h>
+#include <gelf.h>
+
 #include "libcorostacks.h"
 #include "libcorostacks_int.h"
+#include "errors.h"
 #include "utils.h"
 
 /* supported methods to load state table */
@@ -179,7 +181,7 @@ st_next_entry(state_table_t *handle, ste_t *entry)
         return ST_ENTRY_PRESENT;
     }
 
-    cs_unreachable();
+    return ST_ERROR;
 }
 
 void
@@ -196,8 +198,6 @@ st_reset_cursor(state_table_t *handle)
         struct coredump_impl *impl = &st->impl.coredump;
         impl->cur_idx = 0;
     }
-
-    cs_unreachable();
 }
 
 int
@@ -222,5 +222,5 @@ st_get_by_tid(state_table_t *handle, pid_t tid, ste_t *entry)
         NOT_IMPLEMENTED;
     }
 
-    cs_unreachable();
+    return ST_ERROR;
 }

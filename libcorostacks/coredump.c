@@ -5,6 +5,7 @@
 
 #include "libcorostacks.h"
 #include "libcorostacks_int.h"
+#include "errors.h"
 
 int
 coredump_vmem_read(Elf *coredump_elf, csAddr_t addr, size_t nbytes, char *result)

@@ -78,8 +78,19 @@ typedef enum csErrorCode
 }
 csErrorCode_t;
 
-csErrorCode_t csErrorCode(void);
-const char *csErrorMessage(void);
+extern int cs_errno;
+extern char cs_errmsg[];
 
+static inline csErrorCode_t
+csErrorCode(void)
+{
+    return cs_errno;
+}
+
+static inline const char*
+csErrorMessage(void)
+{
+    return cs_errmsg;
+}
 
 #endif // LIBCOROSTACKS_H

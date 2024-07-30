@@ -1,6 +1,9 @@
+#include "errors.h"
+
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+
 #include "libcorostacks.h"
 #include "utils.h"
 
@@ -9,20 +12,7 @@
 int cs_errno;
 char cs_errmsg[ERROR_MSG_BUF_SIZE];
 
-
-csErrorCode_t
-csErrorCode(void)
-{
-    return cs_errno;
-}
-
-const char*
-csErrorMessage(void)
-{
-    return cs_errmsg;
-}
-
-const char*
+static const char*
 errcode_to_string(csErrorCode_t errcode)
 {
     switch (errcode)

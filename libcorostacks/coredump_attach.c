@@ -1,18 +1,19 @@
 /* This file contains libdwfl callbacks to iterate
  * through coroutines in coredump file */
 
-#include <elf.h>
-#include <gelf.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include <libelf.h>
 #include <elfutils/libdwfl.h>
-#include <assert.h>
+#include <elf.h>
+#include <gelf.h>
 
-#include "coro_states.h"
 #include "libcorostacks.h"
 #include "libcorostacks_int.h"
+#include "coro_states.h"
+#include "errors.h"
 #include "utils.h"
 
 typedef struct core_arg
@@ -63,7 +64,8 @@ core_next_thread(Dwfl* dwfl, void* dwfl_arg, void** thread_argp)
         return 0;
     }
 
-    cs_unreachable();
+    /* Error */
+    return -1;
 }
 
 static bool
