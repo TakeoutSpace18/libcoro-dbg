@@ -31,6 +31,7 @@ print_backtrace(csCoroutine_t *coroutine)
     if (ret != CS_OK)
         goto enumerate_frames_fail;
 
+    printf("Coroutine (tid = %i)\n", coroutine->tid);
     for (size_t i = 0; i < frameCount; ++i)
     {
         printf("\t#%zu 0x%016lx in %s ()\n", i, frames[i].pc, frames[i].funcname);
@@ -41,7 +42,12 @@ print_backtrace(csCoroutine_t *coroutine)
 
 enumerate_frames_fail:
     free(frames);
-    fprintf(stderr, "Failed to get stack frames: %s\n", csErrorMessage());
+    /* Ignore this error for now because on each call coro_create() spawns
+     * additional *fake* coroutine, that can't be unwinded.
+     * TODO: come up with a way to not to exclude
+     * this coroutines from state table */
+
+    /* fprintf(stderr, "Failed to get stack frames: %s\n", csErrorMessage()); */
     return;
 
 malloc_fail:
@@ -87,7 +93,6 @@ main(int argc, char **argv) {
     printf("Found %zu coroutines\n", coroutineCount);
     for (size_t i = 0; i < coroutineCount; ++i)
     {
-        printf("Coroutine #%zu (tid = %i)\n", i, coroutines[i].tid);
         print_backtrace(&coroutines[i]);
     }
 
