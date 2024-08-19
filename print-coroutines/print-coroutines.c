@@ -42,12 +42,7 @@ print_backtrace(csCoroutine_t *coroutine)
 
 enumerate_frames_fail:
     free(frames);
-    /* Ignore this error for now because on each call coro_create() spawns
-     * additional *fake* coroutine, that can't be unwinded.
-     * TODO: come up with a way to not to exclude
-     * this coroutines from state table */
-
-    /* fprintf(stderr, "Failed to get stack frames: %s\n", csErrorMessage()); */
+    fprintf(stderr, "Failed to get stack frames: %s\n", csErrorMessage());
     return;
 
 malloc_fail:

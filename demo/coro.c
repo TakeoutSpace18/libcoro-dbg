@@ -60,18 +60,20 @@
 typedef unsigned long addr_t;
 
 typedef struct state_table_entry {
+    pid_t tid;
     addr_t sp;
     addr_t pc;
     addr_t fp;
-    pid_t tid;
 } ste_t;
 
 static ste_t *__coro_state_table = NULL;
 static size_t st_capacity = 1024; /* how many entries (coroutines) can fit
                                     in state table */
+static size_t st_size = 0; /* how many entries are currently in state table */
+
 
 static void* __attribute_used__
-map_state_table_file() 
+map_state_table_file(void) 
 {
     /* Map state table to file to examine coroutine stacks in corefile.*/
     /* This is less convenient approach than reading state table       */
@@ -99,9 +101,39 @@ fail:
     return NULL;
 }
 
+static size_t
+ste_upper_bound(ste_t ste, ste_t *table, size_t st_size)
+{
+    size_t begin = 0;
+    size_t end = st_size - 1;
+
+    size_t pos = st_size;
+
+    while (begin <= end)
+    {
+        size_t mid = (begin + end) / 2;
+
+        if (ste.tid < table[mid].tid)
+        {
+            pos = mid;
+            end = mid - 1;
+        }
+        else
+        {
+            begin = mid + 1;
+        }
+    }
+
+    return pos;
+}
+
 static void __attribute_used__
 update_coro_state(coro_context *context, addr_t sp, addr_t pc, addr_t fp)
 {
+    /* skip internal libcoro coroutines */
+    if (context->tid == 0)
+        return;
+
     if (!__coro_state_table)
     {
 #ifdef CORO_DEBUG_MAP_TO_FILE
@@ -113,50 +145,54 @@ update_coro_state(coro_context *context, addr_t sp, addr_t pc, addr_t fp)
             return;
     }
 
+    ste_t entry = (ste_t) {
+        .tid = context->tid,
+        .fp = fp,
+        .sp = sp,
+        .pc = pc
+    };
+
+    /* TIDs are assigned monotonously and coroutine removal is not supported,
+     * so we can skip bin search in new entry case. */
     bool new_entry = false;
+    if (context->tid > __coro_state_table[st_size - 1].tid)
+        new_entry = true;
+
     size_t pos;
-    for (pos = 0; pos < st_capacity; ++pos) 
+    if (!new_entry)
     {
-        /* Find entry by old stack pointer */
-        if (__coro_state_table[pos].sp == (addr_t) context->sp)
-            break;
-
-        /* null entry means end of the table */
-        if (__coro_state_table[pos].sp == 0)
-        {
-            new_entry = true;
-            break;
-        }
+        /* bin search position of existing entry */
+        size_t ste_ub = ste_upper_bound(entry, __coro_state_table, st_size);
+        if (ste_ub > 0)
+            pos = ste_ub - 1;
+        else
+            fprintf(stderr, "ste was not found\n");
     }
+    else {
+        pos = st_size;
+        st_size++;
 
-    if (pos == st_capacity)
-    {
-        ste_t *tmp = realloc(__coro_state_table, st_capacity * 2 * sizeof(ste_t));
-        if (!tmp)
+        /* extend state table if needed */
+        if (pos == st_capacity)
         {
-            fprintf(stderr, "update_coro_state(): out of memory\n");
+#ifndef CORO_DEBUG_MAP_TO_FILE
+            ste_t *tmp = realloc(__coro_state_table, st_capacity * 2 * sizeof(ste_t));
+            if (!tmp)
+            {
+                fprintf(stderr, "update_coro_state(): out of memory\n");
+                return;
+            }
+            __coro_state_table = tmp;
+            st_capacity *= 2;
+#else
+            fprintf(stderr, "state table capacity excedeed!"
+                    "\n\t(table growth in MAP_TO_FILE mode is not implemented)\n");
             return;
+#endif
         }
-        /* Fill allocated part with zeroes */
-        memset(tmp + st_capacity, 0, st_capacity * sizeof(ste_t));
-
-        __coro_state_table = tmp;
-        st_capacity *= 2;
-        return;
     }
 
-    /* Set TID for new entry */
-    static size_t num_entries = 0;
-    if (new_entry)
-    {
-        num_entries++;
-        pid_t tid = num_entries;
-        __coro_state_table[pos].tid = tid;
-    }
-
-    __coro_state_table[pos].sp = sp;
-    __coro_state_table[pos].pc = pc;
-    __coro_state_table[pos].fp = fp;
+    __coro_state_table[pos] = entry;
 }
 
 #endif /* CORO_DEBUG */
@@ -585,6 +621,16 @@ coro_create (coro_context *ctx, coro_func coro, void *arg, void *sptr, size_t ss
 # elif CORO_ASM
 
   #if __i386__ || __x86_64__
+    #ifdef CORO_DEBUG
+      /* assign ID to new coroutine */
+      static pid_t new_tid = 0;
+      new_tid++;
+      ctx->tid = new_tid;
+
+      /* assign zero id to internal coroutine to filter it out */
+      create_coro->tid = 0;
+    #endif
+
     ctx->sp = (void **)(ssize + (char *)sptr);
     *--ctx->sp = (void *)abort; /* needed for alignment only */
     *--ctx->sp = (void *)coro_init;

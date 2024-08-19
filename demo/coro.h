@@ -97,6 +97,8 @@
 #ifndef CORO_H
 #define CORO_H
 
+#include <sys/types.h>
+
 #if __cplusplus
 extern "C" {
 #endif
@@ -392,6 +394,10 @@ struct coro_context
 struct coro_context
 {
   void **sp; /* must be at offset 0 */
+
+#ifdef CORO_DEBUG
+  pid_t tid; /* needed to find coroutine in state table */
+#endif
 };
 
 #if __i386__ || __x86_64__

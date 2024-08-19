@@ -7,10 +7,10 @@
 
 typedef struct state_table_entry
 {
+    pid_t tid;
     csAddr_t sp;
     csAddr_t pc;
     csAddr_t fp;
-    pid_t tid;
 }
 ste_t;
 
