@@ -22,8 +22,6 @@ Example program and modified libcoro can be found in *demo* directory.
 ### Why not use GDB?
 The thing is that GDB currently has no support for green threads and can't
 do unwinding outside of main stack without running process.
-So plans are to implement python script for GDB that will provide a way to 
-inspect coroutines in coredump via libcorostacks. \
 [Link to discussion](https://lore.kernel.org/all/87ilsn784k.fsf@oldenburg.str.redhat.com/T/)
 
 ### How to build
